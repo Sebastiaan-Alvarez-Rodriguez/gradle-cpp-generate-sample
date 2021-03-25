@@ -2,69 +2,78 @@ plugins {
     id 'cpp-application'
 }
 
+// Destination directory for generated code.
+def generatedLoc = "src/main/cpp/generated"
 
+// Register a new task named "codeGeneration". This task will generate ourr code.
 def codeGeneration = tasks.register("codeGeneration", CodeGenerator) {
-    cppDir = file("src/main/generated/") //project.layout.buildDirectory.dir("generated/cpp")
-    headersDir = file("src/main/generated/") //project.layout.buildDirectory.dir("generated/headers")
+    cppDir = file(generatedLoc)
+    headersDir = file(generatedLoc)
 }
 
 
-// Set the target operating system and architecture for this application
+// Set the target operating system and architecture for this application.
 application {
     targetMachines.add(machines.linux.x86_64)
-    source.from {
-        codeGeneration.flatMap { it.cppDir }
-        file("src/main/cpp")
-    }
-    privateHeaders.from codeGeneration.flatMap { it.headersDir }
 }
 
+// Make every source-compilation task depend on source generation.
+// This ensures we generate all sources before we start compiling.
+tasks.withType(CppCompile).configureEach {
+    dependsOn codeGeneration
+}
 
-//model {
-//    components {
-//        otherlib(NativeLibrarySpec) {
-//            sources.cpp {
-//                builtBy tasks.codeGeneration
-//            }
-//        }
-//    }
-//}
+// Note: Below snippet does not work! It will generate the sources, but does not include them in the compilation process.
+/*
+build {
+    dependsOn codeGeneration
+}
+*/
+
+// Remove the 'src/main/cpp/generated' dir when cleaning up.
+clean {
+    delete generatedLoc
+}
 
 // Code generation implementation could be in another plugin or buildSrc
+// Code generation class that simply creates 2 sources files.
+// Note: The generated code here has dependencies on existing code.
+//       The existing code also has dependencies on the generated code (e.g. extern int lineno).
 class CodeGenerator extends DefaultTask {
-@OutputDirectory
-DirectoryProperty cppDir = project.objects.directoryProperty()
+    @OutputDirectory
+    DirectoryProperty cppDir = project.objects.directoryProperty()
 
-@OutputDirectory
-DirectoryProperty headersDir = project.objects.directoryProperty()
+    @OutputDirectory
+    DirectoryProperty headersDir = project.objects.directoryProperty()
 
-@TaskAction
-public void generate() {
-    generateSources(cppDir.getAsFile().get())
-    generateHeaders(headersDir.getAsFile().get())
-}
-
-private void generateSources(File generatedDir) {
-    new File(generatedDir, "gen.cpp").text = """
-#include "test.h"
-#include "gen.h"
-    extern int yylineno;
-    int lineno = 1;
-
-    void testprint(Test t) {
-        t.print();
+    @TaskAction
+    public void generate() {
+        generateSources(cppDir.getAsFile().get())
+        generateHeaders(headersDir.getAsFile().get())
     }
-    """
+
+    private void generateSources(File generatedDir) {
+        new File(generatedDir, "gen.cpp").text = """
+#include "../test.h"
+#include "gen.h"
+extern int yylineno;
+int lineno = 1;
+
+void testprint(Test t) {
+    t.print();
 }
-private void generateHeaders(File generatedDir) {
-    new File(generatedDir, "gen.h").text = """
+"""
+    }
+
+    private void generateHeaders(File generatedDir) {
+        new File(generatedDir, "gen.h").text = """
 #ifndef __GEN_H__
 #define __GEN_H__ \
 #include "test.h"
 
-    void testprint(Test t);
+void testprint(Test t);
 
 #endif
 """
-}
+    }
 }

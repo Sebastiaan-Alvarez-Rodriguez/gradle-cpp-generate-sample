@@ -3,4 +3,5 @@
 
 # Ignore Gradle build output directory
 build
-src/main/generated/
+# Ignore generated source files
+/app/src/main/cpp/generated/
